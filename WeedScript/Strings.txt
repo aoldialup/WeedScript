@@ -1,0 +1,64 @@
+Our VM can represent three types of values right now: numbers, bools, and nil. Those types have two important
+things in common. They're immutable and they're small. Numbers are the largest, and they still fit into two 64-bit words
+That's a small enough price that we can afford to pay it for all values, even bools and nils, which don't need that much space
+
+Strings are more complicated, because there's no maximum length. Even if we capped the length at 255,
+that's still too much memory to spend on every single value. UCSD Pascal, one of the first implementations of Pascal
+used a length byte at the start of the string, instead of having a null byte at the end like C does it.
+The issue is that the strings were capped at 255 length
+
+We need to support values whose sizes vary, sometimes greatly. This is what dynamic heap allocation is for.
+We can allocate as many bytes as we need. We get back a pointer that we'll use to keep track of the value as it flows
+through the VM
+
+Values and Objects
+
+Using the heap for larger, variable-sized values and the stack for smaller, atomic ones leads to a two-level representation
+Every Weed value that you can store in a variable or return from an expression will be a Value. For small, fied size types
+like numbers, the pyaload is stored directly inside the Value struct itself. 
+
+If the object is larger, its data will live on the heap. The value's payload will then be a pointer to that 
+blob of memory on the heap. We will eventually have a handful of heap-allocated types in clox: strings,
+instances, and functions. Each type has its own unique data, but there is also state they all share that our future GC
+will need
+
+We'll call this common representation "Object". Each Lox value whose state lives on the heap is an object.
+Object will be added to ValueType to represent that
+
+		union
+		{
+			bool boolean;
+			double number;
+
+			// Means the payload of the value is pointng to heap memory
+			// When a value's type is OBJECT, the payload is a pointer to the heap memory, so we add that to the union
+			Object* object;
+		} as;
+
+When a Value's type is OBJECT, the payload is a pointer to the heap of memory, so we must add that to the union
+
+As usual with the value types, we crank out a couple helper functions (IsObject, FromObject, ToObject)
+
+
+Every heap allocated value is an Object, but not all Objects are built the same. For strings, we need
+the array of characters. When we get to instances they will need all their data fields
+Right now, we can't use a union for every different type of object
+
+We will use struct inheritance, which is a form of type punning.
+
+Similarly to a tagged union, each object starts with a tag field that identifies what kind of object it is - string instance, etc.
+An enum, in simple language. Follwing that are the payload fields. Instead of a union with cases for each type, each type is its own separate 
+class.
+
+The name "object" itself refers to a class that contains the state shared across all object types, its like the base class.
+We forward declare Object in Value.h because we don't want cyclical include
+
+For now each object instance will have a type of object as an enum. We wiil later add stuff that aids GC.
+
+// A string object contains an array of characters
+// Those are stored in a separate, heap-allocated array so we can set aside as much memory as we need for each string
+// We also store the number of bytes in the array, so we don't have to walk the string to find its length
+
+// The first four bytes will be its type tag, because it will inherit the type tag from Object
+class ObjectString : public Object { int length; char* chars; };
+
